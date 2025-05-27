@@ -13,5 +13,5 @@ ext {
     moduleMaxRiruApiVersion = 26
 
     // Frida
-    fridaVersion = "16.7.14"
+    fridaVersion = "17.0.5"
 }
