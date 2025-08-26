@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <cerrno>
+#include <cstring>
 
 #include "log.h"
 
@@ -16,8 +18,8 @@ struct PROCMAPSINFO {
     uintptr_t start, end, offset;
     uint8_t perms;
     ino_t inode;
-    char* dev;
-    char* path;
+    std::string dev;
+    std::string path;
 };
 
 
@@ -77,26 +79,33 @@ void remap_lib(std::string lib_path) {
         void *address = reinterpret_cast<void *>(info.start);
         size_t size = info.end - info.start;
 
-        void *map = mmap(0, size, PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-
+        void *map = mmap(nullptr, size, PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+        if (map == MAP_FAILED) {
+            LOGE("Failed to allocate memory for %s: %s", lib_name.c_str(), std::strerror(errno));
+            return;
+        }
         if ((info.perms & PROT_READ) == 0) {
-            LOGI("Removing memory protection: %s", info.path);
+            LOGI("Removing memory protection: %s", info.path.c_str());
             mprotect(address, size, PROT_READ);
         }
 
-        if (map == nullptr) {
-            LOGE("Failed to Allocate Memory: %s", strerror(errno));
+        // Copy the in-memory data to the new location
+        std::memmove(map, address, size);
+        // Attempt to remap (MREMAP_FIXED)
+        void *new_addr = mremap(map, size, size, MREMAP_MAYMOVE | MREMAP_FIXED, info.start);
+        if (new_addr == MAP_FAILED) {
+            LOGE("Failed to remap memory for %s: %s", lib_name.c_str(), std::strerror(errno));
             return;
         }
+        // Re-apply original memory protections
+        mprotect(new_addr, size, info.perms);
+        // Flush the instruction cache on ARM architectures
+#if defined(__arm__) || defined(__aarch64__)
+        __builtin___clear_cache(reinterpret_cast<char*>(new_addr),
+                                reinterpret_cast<char*>(new_addr) + size);
+#endif
 
-        /* Copy the in-memory data to new virtual location via the memove, allocate and commit it via mremap */
-        std::memmove(map, address, size);
-        mremap(map, size, size, MREMAP_MAYMOVE | MREMAP_FIXED, info.start);
-
-        /* Re-apply memory protections */
-        mprotect(reinterpret_cast<void *>(info.start), size, info.perms);
-
-        LOGI("Allocated at address %p with size of %zu", map, size);
+        LOGI("Allocated at address %p with size of %zu", new_addr, size);
     }
 
     LOGI("Remapped");
