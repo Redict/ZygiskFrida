@@ -4,7 +4,7 @@ ext {
     moduleName = "ZygiskFrida"
     moduleAuthor = "lico-n"
     moduleDescription = "Injects frida gadget via zygisk."
-    moduleVersion = "v1.8.0"
+    moduleVersion = "v1.8.1"
     moduleVersionCode = 11
 
     // Riru
@@ -13,5 +13,5 @@ ext {
     moduleMaxRiruApiVersion = 26
 
     // Frida
-    fridaVersion = "17.2.4"
+    fridaVersion = "17.2.17"
 }
